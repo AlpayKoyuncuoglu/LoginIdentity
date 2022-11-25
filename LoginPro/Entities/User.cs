@@ -8,7 +8,7 @@ namespace LoginPro.Entities
     {
         //6.0 la birlikte property'ler default olarak nullable tanımlanmıyor. Bu yüzden nullable yapmak için yanlarına soru işareti konmak zorunda
         [Key]
-        public Guid MyProperty { get; set; }
+        public Guid Id { get; set; }
         [StringLength(50)]
         //default'u nvarchar 100
         public string? FullName { get; set; }
