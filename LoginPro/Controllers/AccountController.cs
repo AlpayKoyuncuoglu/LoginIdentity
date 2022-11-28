@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using NETCore.Encrypt.Extensions;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 
 namespace LoginPro.Controllers
@@ -29,16 +30,15 @@ namespace LoginPro.Controllers
         {
             if (ModelState.IsValid)
             {
-                string md5Salt = _configuration.GetValue<string>("AppSettings:MD5Salt");
-                string saltedPassword = model.Password + md5Salt;
-                string hashedPassword = saltedPassword.MD5();
-                
+                string hashedPassword = DoMD5HashedString(model.Password);
+
+
                 //firstOrDefault kullanılmadı, birden çok varsa hata döndürmesi istenildi
                 //aslında aynı username ile ekleme engellenmiş olmasına rağment burada ekstra bir kontrol yapıldı
-                User user=_databaseContext.Users.SingleOrDefault(u => u.Username.ToLower() == model.Username.ToLower() && u.Password == saltedPassword);
-                if(user != null)
+                User user = _databaseContext.Users.SingleOrDefault(u => u.Username.ToLower() == model.Username.ToLower() && u.Password == hashedPassword);
+                if (user != null)
                 {
-                    if(user.Locked)
+                    if (user.Locked)
                     {
                         ModelState.AddModelError(nameof(model.Username), "user is locked");
                         return View(model);
@@ -50,15 +50,17 @@ namespace LoginPro.Controllers
                     //daha global gir yazım için aşağıdaki gibi güncellendi
                     claims.Add(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
                     claims.Add(new Claim(ClaimTypes.Name, user.FullName ?? string.Empty));
-                    claims.Add(new Claim("Username", user.FullName));
+                    claims.Add(new Claim(ClaimTypes.Role, user.Role));
+                    claims.Add(new Claim("Username", user.Username));
                     //ClaimsIdentity identity = new ClaimsIdentity(claims,"Cookies");//aşağıdaki gibi düzenlendi
                     ClaimsIdentity identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                     ClaimsPrincipal principal = new ClaimsPrincipal(identity);
-                    HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,principal);
+                    HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                    return RedirectToAction("Index", "Home");
                 }
                 else
                 {
-                    ModelState.AddModelError("","username or password incorrect");
+                    ModelState.AddModelError("", "username or password incorrect");
                 }
             }
             return View(model);
@@ -80,9 +82,7 @@ namespace LoginPro.Controllers
                     ModelState.AddModelError(nameof(model.Username), "username already exist");
                     View(model);
                 }
-                string md5Salt = _configuration.GetValue<string>("AppSettings:MD5Salt");
-                string saltedPassword = model.Password + md5Salt;
-                string hashedPassword = saltedPassword.MD5();
+                string hashedPassword = DoMD5HashedString(model.Password);
 
                 User user = new()
                 {
@@ -108,7 +108,72 @@ namespace LoginPro.Controllers
 
         public IActionResult Profile()
         {
+            //Guid userid = new Guid(User.FindFirstValue(ClaimTypes.NameIdentifier));//FindFirst kullanılasaydı sonuna .value denmesi gerekirdi
+            //User user = _databaseContext.Users.SingleOrDefault(x => x.Id == userid);
+
+            ProfileInfoLoader();
+
             return View();
+        }
+
+        private void ProfileInfoLoader()
+        {
+            Guid userid = new Guid(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            User user = _databaseContext.Users.SingleOrDefault(x => x.Id == userid);
+
+            ViewData["FullName"] = user.FullName; 
+        }
+
+
+        [HttpPost]
+        public IActionResult ProfileChangeFullName([Required][StringLength(50)] string? fullname)//buraya gelen değer html tarafında input tag'i içinde name ile belirlendi
+        {
+            if (ModelState.IsValid)
+            { 
+                Guid userid = new Guid(User.FindFirstValue(ClaimTypes.NameIdentifier));//FindFirst kullanılasaydı sonuna .value denmesi gerekirdi
+                User user = _databaseContext.Users.SingleOrDefault(x => x.Id == userid);
+
+                user.FullName = fullname;
+                _databaseContext.SaveChanges();
+
+                return RedirectToAction(nameof(Profile));
+            }
+
+            ProfileInfoLoader();
+            return View("Profile");//hatanın gözükmesi için redirectToAction kullanılmadı
+        }
+
+        [HttpPost]
+        public IActionResult ProfileChangePassword([Required][MinLength(6)][MaxLength(16)] string? password)
+        {
+            if (ModelState.IsValid)
+            {
+                Guid userid = new Guid(User.FindFirstValue(ClaimTypes.NameIdentifier));
+                User user = _databaseContext.Users.SingleOrDefault(x => x.Id == userid);
+
+                string hashedPassword = DoMD5HashedString(password);
+
+                user.Password = hashedPassword;
+                _databaseContext.SaveChanges();
+
+                ViewData["result"] = "PasswordChanged";
+            }
+
+            ProfileInfoLoader();
+            return View("Profile");
+        }
+        private string DoMD5HashedString(string s)
+        {
+            string md5Salt = _configuration.GetValue<string>("AppSettings:MD5Salt");
+            string salted = s + md5Salt;
+            string hashed = salted.MD5();
+            return hashed;
+        }
+
+        public IActionResult Logout()
+        {
+            HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return RedirectToAction(nameof(Login));
         }
     }
 }

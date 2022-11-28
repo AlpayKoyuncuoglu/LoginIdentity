@@ -1,4 +1,5 @@
 ﻿using LoginPro.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
 
@@ -13,12 +14,18 @@ namespace LoginPro.Controllers
             _logger = logger;
         }
 
+        [Authorize]
         public IActionResult Index()
         {
             return View();
         }
-
+        //controller seviyesinde [Authorize] kullanıp [AllowAnonymous] ile belirli actionlar erişime açık hala getirilebilir
         public IActionResult Privacy()
+        {
+            return View();
+        }
+
+        public IActionResult AccessDenied()
         {
             return View();
         }
