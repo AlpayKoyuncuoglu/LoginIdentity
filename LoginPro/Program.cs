@@ -38,8 +38,10 @@ if (!app.Environment.IsDevelopment())
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseAuthentication();//eklemeyi unutma
 
 app.UseAuthorization();
+
 
 app.MapControllerRoute(
     name: "default",
